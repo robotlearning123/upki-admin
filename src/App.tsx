@@ -3,8 +3,16 @@ import { fetchAdminData } from './services/api';
 import type { AdminData, VideoJob } from './services/api';
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
+const ADMIN_PASSWORD = 'upki2024admin';
+const AUTH_KEY = 'upki_admin_auth';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem(AUTH_KEY) === 'true';
+  });
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   const [data, setData] = useState<AdminData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,6 +20,22 @@ function App() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos'>('overview');
   const [selectedVideo, setSelectedVideo] = useState<VideoJob | null>(null);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      localStorage.setItem(AUTH_KEY, 'true');
+      setLoginError('');
+    } else {
+      setLoginError('Invalid password');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem(AUTH_KEY);
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -55,6 +79,44 @@ function App() {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Login Screen
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center text-3xl mx-auto mb-4">
+              🔐
+            </div>
+            <h1 className="text-2xl font-bold text-white">UPKI Admin</h1>
+            <p className="text-gray-400 text-sm mt-2">Enter password to access dashboard</p>
+          </div>
+          <form onSubmit={handleLogin}>
+            <div className="mb-4">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                autoFocus
+              />
+            </div>
+            {loginError && (
+              <p className="text-red-400 text-sm mb-4">{loginError}</p>
+            )}
+            <button
+              type="submit"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            >
+              Login
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (!data && loading) {
     return (
@@ -114,6 +176,12 @@ function App() {
                 className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex items-center gap-2"
               >
                 {loading ? '...' : '🔄'} Refresh
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-sm"
+              >
+                Logout
               </button>
             </div>
           </div>
