@@ -1,5 +1,8 @@
 // Admin API Service
-const API_BASE = 'https://www.upki.ai/api/admin';
+// Data API still uses upki.ai (database is there)
+const DATA_API_BASE = 'https://www.upki.ai/api/admin';
+// Analytics API uses local endpoint (GA4 credentials are here)
+const ANALYTICS_API_BASE = '/api/admin';
 const ADMIN_KEY = 'upki2024admin';
 
 export interface VideoJob {
@@ -97,7 +100,7 @@ export interface AdminData {
 }
 
 export async function fetchAdminData(): Promise<AdminData> {
-  const response = await fetch(`${API_BASE}/data`, {
+  const response = await fetch(`${DATA_API_BASE}/data`, {
     method: 'GET',
     headers: {
       'x-admin-key': ADMIN_KEY,
@@ -133,7 +136,7 @@ export async function fetchAdminData(): Promise<AdminData> {
 
 export async function fetchAnalytics(): Promise<AnalyticsData | null> {
   try {
-    const response = await fetch(`${API_BASE}/analytics`, {
+    const response = await fetch(`${ANALYTICS_API_BASE}/analytics`, {
       method: 'GET',
       headers: {
         'x-admin-key': ADMIN_KEY,
