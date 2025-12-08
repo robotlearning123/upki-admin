@@ -52,6 +52,39 @@ export interface DailyStats {
   videos: number;
 }
 
+// Analytics interfaces
+export interface AnalyticsMetrics {
+  users: number;
+  sessions: number;
+  pageviews: number;
+  avgSessionDuration: number;
+}
+
+export interface AnalyticsData {
+  configured: boolean;
+  realtime: {
+    activeUsers: number;
+  };
+  today: AnalyticsMetrics;
+  last7Days: AnalyticsMetrics;
+  last30Days: AnalyticsMetrics;
+  topPages: Array<{
+    path: string;
+    pageviews: number;
+    users: number;
+  }>;
+  topCountries: Array<{
+    country: string;
+    users: number;
+  }>;
+  dailyData: Array<{
+    date: string;
+    users: number;
+    sessions: number;
+    pageviews: number;
+  }>;
+}
+
 export interface AdminData {
   videoJobs: VideoJob[];
   legacyJobs: VideoJob[];
@@ -96,4 +129,34 @@ export async function fetchAdminData(): Promise<AdminData> {
       recentSignIns: 0,
     },
   };
+}
+
+export async function fetchAnalytics(): Promise<AnalyticsData | null> {
+  try {
+    const response = await fetch(`${API_BASE}/analytics`, {
+      method: 'GET',
+      headers: {
+        'x-admin-key': ADMIN_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      console.error('Analytics API error:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    if (!result.success) {
+      console.log('Analytics not configured:', result.error);
+      return { configured: false } as AnalyticsData;
+    }
+
+    return {
+      configured: true,
+      ...result.data,
+    };
+  } catch (error) {
+    console.error('Failed to fetch analytics:', error);
+    return null;
+  }
 }

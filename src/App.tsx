@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAdminData } from './services/api';
-import type { AdminData, VideoJob } from './services/api';
+import { fetchAdminData, fetchAnalytics } from './services/api';
+import type { AdminData, VideoJob, AnalyticsData } from './services/api';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
 const ADMIN_PASSWORD = 'upki2024admin';
@@ -18,8 +18,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos' | 'analytics'>('overview');
   const [selectedVideo, setSelectedVideo] = useState<VideoJob | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,8 +41,12 @@ function App() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await fetchAdminData();
+      const [result, analyticsResult] = await Promise.all([
+        fetchAdminData(),
+        fetchAnalytics(),
+      ]);
       setData(result);
+      setAnalytics(analyticsResult);
       setLastRefresh(new Date());
       setError(null);
     } catch (err) {
@@ -287,7 +292,7 @@ function App() {
         {/* Tabs */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
           <div className="border-b border-gray-700 flex">
-            {(['overview', 'users', 'videos'] as const).map((tab) => (
+            {(['overview', 'users', 'videos', 'analytics'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -300,6 +305,7 @@ function App() {
                 {tab === 'overview' && '📈 Overview'}
                 {tab === 'users' && `👥 Users (${data?.authUserStats.total || 0})`}
                 {tab === 'videos' && `🎬 Videos (${data?.videoStats.total || 0})`}
+                {tab === 'analytics' && `📊 Analytics${analytics?.realtime ? ` (${analytics.realtime.activeUsers} live)` : ''}`}
               </button>
             ))}
           </div>
@@ -502,6 +508,126 @@ function App() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'analytics' && (
+              <div>
+                {!analytics ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <p>Loading analytics...</p>
+                  </div>
+                ) : !analytics.configured ? (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">📊</div>
+                    <h3 className="text-xl font-semibold mb-2">Google Analytics Not Configured</h3>
+                    <p className="text-gray-400 mb-4">Set up GA4 credentials in Vercel to enable analytics</p>
+                    <div className="text-left max-w-md mx-auto bg-gray-700/50 rounded-lg p-4 text-sm">
+                      <p className="text-gray-300 mb-2">Required environment variables:</p>
+                      <ul className="list-disc list-inside text-gray-400 space-y-1">
+                        <li>GA_PROPERTY_ID</li>
+                        <li>GA_CLIENT_EMAIL</li>
+                        <li>GA_PRIVATE_KEY</li>
+                      </ul>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Realtime */}
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="bg-green-600/20 border border-green-600/50 rounded-xl px-6 py-4 flex items-center gap-3">
+                        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                        <div>
+                          <p className="text-xs text-green-400">Active Now</p>
+                          <p className="text-3xl font-bold text-green-400">{analytics.realtime?.activeUsers || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Period Stats */}
+                    <h3 className="text-lg font-semibold mb-4">Traffic Overview</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                      {[
+                        { label: 'Today', data: analytics.today },
+                        { label: 'Last 7 Days', data: analytics.last7Days },
+                        { label: 'Last 30 Days', data: analytics.last30Days },
+                      ].map(({ label, data }) => (
+                        <div key={label} className="bg-gray-700/50 rounded-lg p-4">
+                          <h4 className="text-sm text-gray-400 mb-3">{label}</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-2xl font-bold">{data?.users || 0}</p>
+                              <p className="text-xs text-gray-500">Users</p>
+                            </div>
+                            <div>
+                              <p className="text-2xl font-bold">{data?.sessions || 0}</p>
+                              <p className="text-xs text-gray-500">Sessions</p>
+                            </div>
+                            <div>
+                              <p className="text-2xl font-bold">{data?.pageviews || 0}</p>
+                              <p className="text-xs text-gray-500">Pageviews</p>
+                            </div>
+                            <div>
+                              <p className="text-2xl font-bold">{Math.round(data?.avgSessionDuration || 0)}s</p>
+                              <p className="text-xs text-gray-500">Avg Duration</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Top Pages & Countries */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Top Pages */}
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4">Top Pages (7 days)</h3>
+                        <div className="bg-gray-700/50 rounded-lg overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-600">
+                                <th className="text-left py-2 px-3 text-gray-400">Page</th>
+                                <th className="text-right py-2 px-3 text-gray-400">Views</th>
+                                <th className="text-right py-2 px-3 text-gray-400">Users</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(analytics.topPages || []).slice(0, 8).map((page, i) => (
+                                <tr key={i} className="border-b border-gray-600/50">
+                                  <td className="py-2 px-3 text-gray-300 truncate max-w-[200px]" title={page.path}>{page.path}</td>
+                                  <td className="py-2 px-3 text-right">{page.pageviews}</td>
+                                  <td className="py-2 px-3 text-right text-gray-400">{page.users}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Top Countries */}
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4">Top Countries (30 days)</h3>
+                        <div className="bg-gray-700/50 rounded-lg overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-600">
+                                <th className="text-left py-2 px-3 text-gray-400">Country</th>
+                                <th className="text-right py-2 px-3 text-gray-400">Users</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(analytics.topCountries || []).slice(0, 8).map((country, i) => (
+                                <tr key={i} className="border-b border-gray-600/50">
+                                  <td className="py-2 px-3 text-gray-300">{country.country}</td>
+                                  <td className="py-2 px-3 text-right">{country.users}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
