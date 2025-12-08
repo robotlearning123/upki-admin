@@ -112,9 +112,13 @@ export async function fetchAdminData(): Promise<AdminData> {
   }
 
   const result = await response.json();
+  console.log('API Response:', JSON.stringify(result, null, 2));
   if (!result.success) {
     throw new Error(result.error || 'Failed to fetch data');
   }
+
+  console.log('authUserStats:', result.data.authUserStats);
+  console.log('authUsers count:', result.data.authUsers?.length);
 
   return {
     videoJobs: result.data.videoJobs || [],
