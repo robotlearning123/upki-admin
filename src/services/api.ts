@@ -99,6 +99,52 @@ export interface AdminData {
   authUserStats: AuthUserStats;
 }
 
+// Realtime monitoring interfaces
+export interface TaskProgress {
+  current_scene: number;
+  total_scenes: number;
+  stage: string;
+  percentage: number;
+}
+
+export interface RealtimeTask {
+  task_id: string;
+  topic: string;
+  user_id: string | null;
+  status: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  progress?: TaskProgress;
+  error?: string;
+}
+
+export interface WorkerStats {
+  [workerName: string]: {
+    active_tasks: number;
+    reserved_tasks: number;
+    status: string;
+  } | { error: string };
+}
+
+export interface RealtimeData {
+  success: boolean;
+  timestamp: string;
+  data: {
+    processing_tasks: RealtimeTask[];
+    queued_tasks: RealtimeTask[];
+    recent_submissions: RealtimeTask[];
+    worker_stats: WorkerStats;
+    system_stats: {
+      total_tasks_in_redis: number;
+      processing: number;
+      queued: number;
+      completed: number;
+      failed: number;
+    };
+  };
+}
+
 export async function fetchAdminData(): Promise<AdminData> {
   const response = await fetch(`${DATA_API_BASE}/data`, {
     method: 'GET',
@@ -164,6 +210,35 @@ export async function fetchAnalytics(): Promise<AnalyticsData | null> {
     };
   } catch (error) {
     console.error('Failed to fetch analytics:', error);
+    return null;
+  }
+}
+
+// Backend API for realtime monitoring
+const BACKEND_API_BASE = 'https://api.upki.ai';
+
+export async function fetchRealtimeData(): Promise<RealtimeData | null> {
+  try {
+    const response = await fetch(`${BACKEND_API_BASE}/api/v1/admin/realtime`, {
+      method: 'GET',
+      headers: {
+        'X-Admin-API-Key': ADMIN_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 503) {
+        console.log('Realtime API not configured on backend');
+        return null;
+      }
+      console.error('Realtime API error:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Failed to fetch realtime data:', error);
     return null;
   }
 }

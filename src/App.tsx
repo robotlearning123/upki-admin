@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAdminData, fetchAnalytics } from './services/api';
-import type { AdminData, VideoJob, AnalyticsData } from './services/api';
+import { fetchAdminData, fetchAnalytics, fetchRealtimeData } from './services/api';
+import type { AdminData, VideoJob, AnalyticsData, RealtimeData } from './services/api';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
+const REALTIME_REFRESH_INTERVAL = 5000; // 5 seconds for realtime tab
 const ADMIN_PASSWORD = 'upki2024admin';
 const AUTH_KEY = 'upki_admin_auth';
 
@@ -18,9 +19,10 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos' | 'analytics'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos' | 'analytics' | 'realtime'>('overview');
   const [selectedVideo, setSelectedVideo] = useState<VideoJob | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [realtime, setRealtime] = useState<RealtimeData | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,12 +43,14 @@ function App() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [result, analyticsResult] = await Promise.all([
+      const [result, analyticsResult, realtimeResult] = await Promise.all([
         fetchAdminData(),
         fetchAnalytics(),
+        fetchRealtimeData(),
       ]);
       setData(result);
       setAnalytics(analyticsResult);
+      setRealtime(realtimeResult);
       setLastRefresh(new Date());
       setError(null);
     } catch (err) {
@@ -292,7 +296,7 @@ function App() {
         {/* Tabs */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
           <div className="border-b border-gray-700 flex">
-            {(['overview', 'users', 'videos', 'analytics'] as const).map((tab) => (
+            {(['overview', 'users', 'videos', 'analytics', 'realtime'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -306,6 +310,7 @@ function App() {
                 {tab === 'users' && `👥 Users (${data?.authUserStats.total || 0})`}
                 {tab === 'videos' && `🎬 Videos (${data?.videoStats.total || 0})`}
                 {tab === 'analytics' && `📊 Analytics${analytics?.realtime ? ` (${analytics.realtime.activeUsers} live)` : ''}`}
+                {tab === 'realtime' && `⚡ Realtime${realtime?.data?.system_stats ? ` (${realtime.data.system_stats.processing} active)` : ''}`}
               </button>
             ))}
           </div>
@@ -626,6 +631,194 @@ function App() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'realtime' && (
+              <div>
+                {!realtime ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <p>Loading realtime data...</p>
+                    <p className="text-sm mt-2">Make sure backend ADMIN_API_KEY is configured</p>
+                  </div>
+                ) : (
+                  <div>
+                    {/* System Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                      <div className="bg-yellow-600/20 rounded-lg p-4 border border-yellow-700/50">
+                        <p className="text-xs text-yellow-400">Processing</p>
+                        <p className="text-3xl font-bold text-yellow-400">{realtime.data.system_stats.processing}</p>
+                      </div>
+                      <div className="bg-blue-600/20 rounded-lg p-4 border border-blue-700/50">
+                        <p className="text-xs text-blue-400">Queued</p>
+                        <p className="text-3xl font-bold text-blue-400">{realtime.data.system_stats.queued}</p>
+                      </div>
+                      <div className="bg-green-600/20 rounded-lg p-4 border border-green-700/50">
+                        <p className="text-xs text-green-400">Completed</p>
+                        <p className="text-3xl font-bold text-green-400">{realtime.data.system_stats.completed}</p>
+                      </div>
+                      <div className="bg-red-600/20 rounded-lg p-4 border border-red-700/50">
+                        <p className="text-xs text-red-400">Failed</p>
+                        <p className="text-3xl font-bold text-red-400">{realtime.data.system_stats.failed}</p>
+                      </div>
+                      <div className="bg-gray-600/20 rounded-lg p-4 border border-gray-700/50">
+                        <p className="text-xs text-gray-400">Total in Redis</p>
+                        <p className="text-3xl font-bold">{realtime.data.system_stats.total_tasks_in_redis}</p>
+                      </div>
+                    </div>
+
+                    {/* Processing Tasks */}
+                    {realtime.data.processing_tasks.length > 0 && (
+                      <div className="mb-8">
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <span className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></span>
+                          Processing Now ({realtime.data.processing_tasks.length})
+                        </h3>
+                        <div className="bg-yellow-900/10 rounded-lg border border-yellow-700/30 overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-yellow-700/30">
+                                <th className="text-left py-2 px-3 text-yellow-400">Progress</th>
+                                <th className="text-left py-2 px-3 text-yellow-400">User</th>
+                                <th className="text-left py-2 px-3 text-yellow-400">Topic</th>
+                                <th className="text-left py-2 px-3 text-yellow-400">Started</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {realtime.data.processing_tasks.map((task) => (
+                                <tr key={task.task_id} className="border-b border-yellow-700/20">
+                                  <td className="py-2 px-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-20 bg-gray-700 rounded-full h-2">
+                                        <div
+                                          className="bg-yellow-500 h-2 rounded-full transition-all"
+                                          style={{ width: `${task.progress?.percentage || 0}%` }}
+                                        ></div>
+                                      </div>
+                                      <span className="text-yellow-400 text-xs">
+                                        {task.progress?.percentage?.toFixed(0) || 0}%
+                                      </span>
+                                    </div>
+                                    {task.progress && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Scene {task.progress.current_scene + 1}/{task.progress.total_scenes} - {task.progress.stage}
+                                      </p>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-3 text-gray-400 max-w-[120px] truncate">
+                                    {task.user_id || <span className="italic text-gray-600">anon</span>}
+                                  </td>
+                                  <td className="py-2 px-3 text-gray-300 max-w-[200px] truncate">{task.topic}</td>
+                                  <td className="py-2 px-3 text-gray-400">{formatRelativeTime(task.started_at || task.created_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Queued Tasks */}
+                    {realtime.data.queued_tasks.length > 0 && (
+                      <div className="mb-8">
+                        <h3 className="text-lg font-semibold mb-4">⏳ Queued ({realtime.data.queued_tasks.length})</h3>
+                        <div className="bg-blue-900/10 rounded-lg border border-blue-700/30 overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-blue-700/30">
+                                <th className="text-left py-2 px-3 text-blue-400">User</th>
+                                <th className="text-left py-2 px-3 text-blue-400">Topic</th>
+                                <th className="text-left py-2 px-3 text-blue-400">Submitted</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {realtime.data.queued_tasks.slice(0, 10).map((task) => (
+                                <tr key={task.task_id} className="border-b border-blue-700/20">
+                                  <td className="py-2 px-3 text-gray-400 max-w-[120px] truncate">
+                                    {task.user_id || <span className="italic text-gray-600">anon</span>}
+                                  </td>
+                                  <td className="py-2 px-3 text-gray-300 max-w-[250px] truncate">{task.topic}</td>
+                                  <td className="py-2 px-3 text-gray-400">{formatRelativeTime(task.created_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Worker Stats */}
+                    <div className="mb-8">
+                      <h3 className="text-lg font-semibold mb-4">🔧 Workers</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(realtime.data.worker_stats).map(([name, stats]) => (
+                          <div key={name} className="bg-gray-700/50 rounded-lg p-4">
+                            <p className="text-sm text-gray-400 truncate mb-2" title={name}>{name.split('@')[1] || name}</p>
+                            {'error' in stats ? (
+                              <p className="text-red-400 text-sm">{stats.error}</p>
+                            ) : (
+                              <div className="flex gap-4">
+                                <div>
+                                  <p className="text-2xl font-bold text-green-400">{stats.active_tasks}</p>
+                                  <p className="text-xs text-gray-500">Active</p>
+                                </div>
+                                <div>
+                                  <p className="text-2xl font-bold text-blue-400">{stats.reserved_tasks}</p>
+                                  <p className="text-xs text-gray-500">Reserved</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {Object.keys(realtime.data.worker_stats).length === 0 && (
+                          <p className="text-gray-500 col-span-3">No workers connected</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Recent Submissions */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4">📝 Recent Submissions</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-700">
+                              <th className="text-left py-2 px-3 text-gray-400">Status</th>
+                              <th className="text-left py-2 px-3 text-gray-400">User</th>
+                              <th className="text-left py-2 px-3 text-gray-400">Topic</th>
+                              <th className="text-left py-2 px-3 text-gray-400">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {realtime.data.recent_submissions.map((task) => (
+                              <tr key={task.task_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                                <td className="py-2 px-3">
+                                  <span className={`px-2 py-0.5 rounded text-xs ${
+                                    task.status === 'completed' ? 'bg-green-600/20 text-green-400' :
+                                    task.status === 'failed' ? 'bg-red-600/20 text-red-400' :
+                                    task.status === 'processing' ? 'bg-yellow-600/20 text-yellow-400' :
+                                    'bg-gray-600/20 text-gray-400'
+                                  }`}>
+                                    {task.status}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-gray-400 max-w-[120px] truncate">
+                                  {task.user_id || <span className="italic text-gray-600">anon</span>}
+                                </td>
+                                <td className="py-2 px-3 text-gray-300 max-w-[250px] truncate">{task.topic}</td>
+                                <td className="py-2 px-3 text-gray-400">{formatRelativeTime(task.created_at)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mt-6 text-right">
+                      Last updated: {realtime.timestamp ? new Date(realtime.timestamp).toLocaleTimeString() : '-'}
+                    </p>
                   </div>
                 )}
               </div>
