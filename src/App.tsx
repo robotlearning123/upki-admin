@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAdminData, AdminData, VideoJob } from './services/api';
+import { fetchAdminData } from './services/api';
+import type { AdminData, VideoJob } from './services/api';
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
 
