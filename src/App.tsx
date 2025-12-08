@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchAdminData } from './services/api';
 import type { AdminData, VideoJob } from './services/api';
 
-const REFRESH_INTERVAL = 30000; // 30 seconds
+const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
 const ADMIN_PASSWORD = 'upki2024admin';
 const AUTH_KEY = 'upki_admin_auth';
 
@@ -71,6 +71,30 @@ function App() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatRelativeTime = (dateStr: string) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return formatDate(dateStr);
+  };
+
+  const isNewUser = (dateStr: string) => {
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    return diffMs < 24 * 60 * 60 * 1000; // Within 24 hours
   };
 
   const formatDuration = (seconds?: number) => {
@@ -168,7 +192,7 @@ function App() {
                   onChange={(e) => setAutoRefresh(e.target.checked)}
                   className="rounded"
                 />
-                Auto (30s)
+                Auto (10s)
               </label>
               <button
                 onClick={loadData}
@@ -201,7 +225,7 @@ function App() {
             icon="👤"
             label="Registered"
             value={data?.authUserStats.total || 0}
-            sublabel={`${data?.userStats.length || 0} active`}
+            sublabel={`${data?.authUsers?.filter(u => isNewUser(u.created_at)).length || 0} new today`}
             color="blue"
           />
           <StatCard
@@ -333,7 +357,10 @@ function App() {
             {activeTab === 'users' && data && (
               <div>
                 {/* Registered Users */}
-                <h3 className="text-lg font-semibold mb-4">Registered Users ({data.authUsers.length})</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Registered Users ({data.authUsers.length})</h3>
+                  <span className="text-xs text-gray-500">Sorted by newest first</span>
+                </div>
                 <div className="overflow-x-auto mb-8">
                   <table className="w-full text-sm">
                     <thead>
@@ -348,9 +375,16 @@ function App() {
                     </thead>
                     <tbody>
                       {data.authUsers.map((user, i) => (
-                        <tr key={user.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                        <tr key={user.id} className={`border-b border-gray-700/50 hover:bg-gray-700/30 ${isNewUser(user.created_at) ? 'bg-green-900/10' : ''}`}>
                           <td className="py-3 px-4 text-gray-500">{i + 1}</td>
-                          <td className="py-3 px-4">{user.email}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              {user.email}
+                              {isNewUser(user.created_at) && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-green-500 text-white rounded">NEW</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-0.5 rounded text-xs ${
                               user.provider === 'google' ? 'bg-red-600/20 text-red-400' : 'bg-blue-600/20 text-blue-400'
@@ -358,8 +392,13 @@ function App() {
                               {user.provider === 'google' ? '🔴 Google' : '📧 Email'}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-gray-400">{formatDate(user.created_at)}</td>
-                          <td className="py-3 px-4 text-gray-400">{user.last_sign_in_at ? formatDate(user.last_sign_in_at) : '-'}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col">
+                              <span className={isNewUser(user.created_at) ? 'text-green-400 font-medium' : 'text-gray-400'}>{formatRelativeTime(user.created_at)}</span>
+                              <span className="text-xs text-gray-500">{formatDate(user.created_at)}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-gray-400">{user.last_sign_in_at ? formatRelativeTime(user.last_sign_in_at) : '-'}</td>
                           <td className="py-3 px-4">
                             {user.email_confirmed_at ? (
                               <span className="text-green-400">✓ Confirmed</span>
