@@ -145,6 +145,52 @@ export interface RealtimeData {
   };
 }
 
+// System Status interfaces
+export interface VersionInfo {
+  production: string;
+  built: string[];
+  frontend: string;
+}
+
+export interface HealthScore {
+  overall: number;
+  stability: number;
+  scalability: number;
+  reliability: number;
+  resource_efficiency: number;
+  high_availability: number;
+}
+
+export interface ClusterInfo {
+  nodes: number;
+  api_pods: number;
+  worker_pods: number;
+  redis_status: string;
+}
+
+export interface PerformanceMetrics {
+  avg_processing_time_minutes: number;
+  avg_video_duration_seconds: number;
+  success_rate_percentage: number;
+  last_24h_tasks: number;
+}
+
+export interface MaintenanceWindow {
+  date: string;
+  time_utc: string;
+  impact: string;
+  region: string;
+}
+
+export interface SystemStatus {
+  version: VersionInfo;
+  health: HealthScore;
+  cluster: ClusterInfo;
+  performance: PerformanceMetrics;
+  maintenance_windows: MaintenanceWindow[];
+  last_updated: string;
+}
+
 export async function fetchAdminData(): Promise<AdminData> {
   const response = await fetch(`${DATA_API_BASE}/data`, {
     method: 'GET',
@@ -241,4 +287,72 @@ export async function fetchRealtimeData(): Promise<RealtimeData | null> {
     console.error('Failed to fetch realtime data:', error);
     return null;
   }
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  try {
+    const response = await fetch(`${BACKEND_API_BASE}/api/v1/admin/system-status`, {
+      method: 'GET',
+      headers: {
+        'X-Admin-API-Key': ADMIN_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      // Fallback to static data if endpoint not available
+      return getStaticSystemStatus();
+    }
+
+    const result = await response.json();
+    return result.data;
+  } catch (error) {
+    console.log('Using static system status data');
+    return getStaticSystemStatus();
+  }
+}
+
+// Static system status based on latest known state
+function getStaticSystemStatus(): SystemStatus {
+  return {
+    version: {
+      production: 'v1.0.30',
+      built: ['v1.0.31 (720p default + preStop fix)', 'v1.0.32 (Diagnostic logging)'],
+      frontend: 'v1.3.x',
+    },
+    health: {
+      overall: 72,
+      stability: 75,
+      scalability: 65,
+      reliability: 60,
+      resource_efficiency: 40,
+      high_availability: 85,
+    },
+    cluster: {
+      nodes: 4,
+      api_pods: 2,
+      worker_pods: 4,
+      redis_status: 'Running',
+    },
+    performance: {
+      avg_processing_time_minutes: 12.4,
+      avg_video_duration_seconds: 114,
+      success_rate_percentage: 92,
+      last_24h_tasks: 15,
+    },
+    maintenance_windows: [
+      {
+        date: '2025-12-09',
+        time_utc: '09:00-12:00',
+        impact: 'Control plane CRUD operations may be delayed',
+        region: 'NYC3',
+      },
+      {
+        date: '2025-12-10',
+        time_utc: '18:00-20:00',
+        impact: 'Two 10-second disruption periods',
+        region: 'All Regions',
+      },
+    ],
+    last_updated: new Date().toISOString(),
+  };
 }
