@@ -20,6 +20,7 @@ function App() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos' | 'analytics' | 'realtime'>('overview');
   const [selectedVideo, setSelectedVideo] = useState<VideoJob | null>(null);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [realtime, setRealtime] = useState<RealtimeData | null>(null);
 
@@ -110,6 +111,18 @@ function App() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Get all videos for a specific user
+  const getUserVideos = (userEmail: string) => {
+    if (!data) return [];
+    return data.videoJobs.filter(job => job.user_id === userEmail);
+  };
+
+  // Get user stats by email
+  const getUserStats = (userEmail: string) => {
+    if (!data) return null;
+    return data.userStats.find(u => u.email === userEmail);
   };
 
   // Login Screen
@@ -434,6 +447,7 @@ function App() {
                         <th className="text-left py-3 px-4 text-gray-400">Completed</th>
                         <th className="text-left py-3 px-4 text-gray-400">Failed</th>
                         <th className="text-left py-3 px-4 text-gray-400">Last Active</th>
+                        <th className="text-left py-3 px-4 text-gray-400">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -445,6 +459,14 @@ function App() {
                           <td className="py-3 px-4 text-green-400">{user.completedCount}</td>
                           <td className="py-3 px-4 text-red-400">{user.failedCount}</td>
                           <td className="py-3 px-4 text-gray-400">{formatDate(user.lastActive)}</td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={() => setSelectedUser(user.email)}
+                              className="px-3 py-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded"
+                            >
+                              👁️ View Details
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -852,6 +874,128 @@ function App() {
                   </a>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Detail Modal */}
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setSelectedUser(null)}>
+          <div className="bg-gray-800 rounded-xl border border-gray-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-xl font-semibold mb-1">User Details</h3>
+                  <p className="text-blue-400">{selectedUser}</p>
+                </div>
+                <button onClick={() => setSelectedUser(null)} className="text-gray-400 hover:text-white text-2xl">×</button>
+              </div>
+
+              {/* User Stats Summary */}
+              {(() => {
+                const stats = getUserStats(selectedUser);
+                const videos = getUserVideos(selectedUser);
+                const completedVideos = videos.filter(v => v.status === 'completed');
+                const failedVideos = videos.filter(v => v.status === 'failed');
+                const pendingVideos = videos.filter(v => v.status === 'pending' || v.status === 'processing');
+
+                return (
+                  <>
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                      <div className="bg-gray-700/50 rounded-lg p-4 text-center">
+                        <p className="text-3xl font-bold text-blue-400">{videos.length}</p>
+                        <p className="text-xs text-gray-400">Total Videos</p>
+                      </div>
+                      <div className="bg-green-900/20 rounded-lg p-4 text-center border border-green-700/30">
+                        <p className="text-3xl font-bold text-green-400">{completedVideos.length}</p>
+                        <p className="text-xs text-gray-400">Completed</p>
+                      </div>
+                      <div className="bg-red-900/20 rounded-lg p-4 text-center border border-red-700/30">
+                        <p className="text-3xl font-bold text-red-400">{failedVideos.length}</p>
+                        <p className="text-xs text-gray-400">Failed</p>
+                      </div>
+                      <div className="bg-yellow-900/20 rounded-lg p-4 text-center border border-yellow-700/30">
+                        <p className="text-3xl font-bold text-yellow-400">{pendingVideos.length}</p>
+                        <p className="text-xs text-gray-400">In Progress</p>
+                      </div>
+                    </div>
+
+                    {/* Last Active */}
+                    {stats && (
+                      <p className="text-sm text-gray-400 mb-4">
+                        Last active: <span className="text-white">{formatDate(stats.lastActive)}</span>
+                      </p>
+                    )}
+
+                    {/* Videos Table */}
+                    <h4 className="text-lg font-semibold mb-3">Submitted Questions & Videos</h4>
+                    {videos.length === 0 ? (
+                      <p className="text-gray-500 text-center py-8">No videos found for this user</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-700">
+                              <th className="text-left py-2 px-3 text-gray-400">Status</th>
+                              <th className="text-left py-2 px-3 text-gray-400">Topic / Question</th>
+                              <th className="text-left py-2 px-3 text-gray-400">Created</th>
+                              <th className="text-left py-2 px-3 text-gray-400">Duration</th>
+                              <th className="text-left py-2 px-3 text-gray-400">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {videos.map((video) => (
+                              <tr key={video.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                                <td className="py-2 px-3">
+                                  <span className={`px-2 py-0.5 rounded text-xs ${
+                                    video.status === 'completed' ? 'bg-green-600/20 text-green-400' :
+                                    video.status === 'failed' ? 'bg-red-600/20 text-red-400' :
+                                    video.status === 'processing' ? 'bg-yellow-600/20 text-yellow-400' :
+                                    'bg-gray-600/20 text-gray-400'
+                                  }`}>
+                                    {video.status}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-gray-300 max-w-[300px]">
+                                  <p className="truncate" title={video.topic || '-'}>{video.topic || '-'}</p>
+                                </td>
+                                <td className="py-2 px-3 text-gray-400">{formatDate(video.created_at)}</td>
+                                <td className="py-2 px-3 text-gray-400">{formatDuration(video.duration)}</td>
+                                <td className="py-2 px-3">
+                                  <div className="flex gap-2">
+                                    {video.video_url && (
+                                      <a
+                                        href={video.video_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded"
+                                      >
+                                        ▶️ Watch
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        setSelectedUser(null);
+                                        setSelectedVideo(video);
+                                      }}
+                                      className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+                                    >
+                                      Details
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
