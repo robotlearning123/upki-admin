@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAdminData, fetchAnalytics, fetchRealtimeData } from './services/api';
-import type { AdminData, VideoJob, AnalyticsData, RealtimeData } from './services/api';
+import { fetchAdminData, fetchAnalytics, fetchRealtimeData, fetchSystemStatus } from './services/api';
+import type { AdminData, VideoJob, AnalyticsData, RealtimeData, SystemStatus } from './services/api';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
 const ADMIN_PASSWORD = 'upki2024admin';
@@ -18,11 +18,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos' | 'analytics' | 'realtime'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'videos' | 'analytics' | 'realtime' | 'system'>('overview');
   const [selectedVideo, setSelectedVideo] = useState<VideoJob | null>(null);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [realtime, setRealtime] = useState<RealtimeData | null>(null);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,14 +44,16 @@ function App() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [result, analyticsResult, realtimeResult] = await Promise.all([
+      const [result, analyticsResult, realtimeResult, systemResult] = await Promise.all([
         fetchAdminData(),
         fetchAnalytics(),
         fetchRealtimeData(),
+        fetchSystemStatus(),
       ]);
       setData(result);
       setAnalytics(analyticsResult);
       setRealtime(realtimeResult);
+      setSystemStatus(systemResult);
       setLastRefresh(new Date());
       setError(null);
     } catch (err) {
@@ -325,8 +328,8 @@ function App() {
 
         {/* Tabs */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-          <div className="border-b border-gray-700 flex">
-            {(['overview', 'users', 'videos', 'analytics', 'realtime'] as const).map((tab) => (
+          <div className="border-b border-gray-700 flex flex-wrap">
+            {(['overview', 'users', 'videos', 'analytics', 'realtime', 'system'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -341,6 +344,7 @@ function App() {
                 {tab === 'videos' && `🎬 Videos (${realtime?.data?.system_stats?.total_tasks_in_redis || data?.videoStats.total || 0})`}
                 {tab === 'analytics' && `📊 Analytics${analytics?.realtime ? ` (${analytics.realtime.activeUsers} live)` : ''}`}
                 {tab === 'realtime' && `⚡ Realtime${realtime?.data?.system_stats ? ` (${realtime.data.system_stats.processing} active)` : ''}`}
+                {tab === 'system' && `🔧 System${systemStatus ? ` (v${systemStatus.version.production})` : ''}`}
               </button>
             ))}
           </div>
@@ -905,6 +909,137 @@ function App() {
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'system' && systemStatus && (
+              <div>
+                {/* Maintenance Warnings */}
+                {systemStatus.maintenance_windows.length > 0 && (
+                  <div className="mb-8">
+                    <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl">⚠️</span>
+                        <div className="flex-1">
+                          <h3 className="text-yellow-400 font-semibold mb-2">Scheduled Maintenance</h3>
+                          <div className="space-y-3">
+                            {systemStatus.maintenance_windows.map((window, idx) => (
+                              <div key={idx} className="text-sm">
+                                <p className="text-white font-medium">{window.region}: {window.date} {window.time_utc} UTC</p>
+                                <p className="text-gray-300 mt-1">{window.impact}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Version Information */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold mb-4">📦 Version Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-4">
+                      <p className="text-xs text-green-400 mb-2">Production Backend</p>
+                      <p className="text-2xl font-bold text-green-400">{systemStatus.version.production}</p>
+                      <p className="text-xs text-gray-500 mt-1">✅ Deployed</p>
+                    </div>
+                    <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+                      <p className="text-xs text-blue-400 mb-2">Built (Not Deployed)</p>
+                      <div className="space-y-1">
+                        {systemStatus.version.built.map((version, idx) => (
+                          <p key={idx} className="text-sm text-blue-300">{version}</p>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">🔄 Ready for deployment</p>
+                    </div>
+                    <div className="bg-gray-700/50 rounded-lg p-4">
+                      <p className="text-xs text-gray-400 mb-2">Frontend</p>
+                      <p className="text-2xl font-bold">{systemStatus.version.frontend}</p>
+                      <p className="text-xs text-gray-500 mt-1">Vercel</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Health Scores */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold mb-4">🏥 System Health</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                      { label: 'Overall', value: systemStatus.health.overall, threshold: 70 },
+                      { label: 'Stability', value: systemStatus.health.stability, threshold: 70 },
+                      { label: 'Scalability', value: systemStatus.health.scalability, threshold: 70 },
+                      { label: 'Reliability', value: systemStatus.health.reliability, threshold: 70 },
+                      { label: 'Resource Efficiency', value: systemStatus.health.resource_efficiency, threshold: 60 },
+                      { label: 'High Availability', value: systemStatus.health.high_availability, threshold: 80 },
+                    ].map((metric) => {
+                      const color = metric.value >= metric.threshold ? 'green' : metric.value >= metric.threshold - 20 ? 'yellow' : 'red';
+                      const bgColor = color === 'green' ? 'bg-green-900/20 border-green-700/50' : color === 'yellow' ? 'bg-yellow-900/20 border-yellow-700/50' : 'bg-red-900/20 border-red-700/50';
+                      const textColor = color === 'green' ? 'text-green-400' : color === 'yellow' ? 'text-yellow-400' : 'text-red-400';
+
+                      return (
+                        <div key={metric.label} className={`${bgColor} border rounded-lg p-4`}>
+                          <p className="text-xs text-gray-400 mb-2">{metric.label}</p>
+                          <p className={`text-3xl font-bold ${textColor}`}>{metric.value}</p>
+                          <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                            <div className={`h-2 rounded-full ${color === 'green' ? 'bg-green-500' : color === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${metric.value}%` }}></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Cluster Information */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold mb-4">☸️ Kubernetes Cluster (NYC3)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 text-center">
+                      <p className="text-xs text-blue-400 mb-2">Nodes</p>
+                      <p className="text-3xl font-bold text-blue-400">{systemStatus.cluster.nodes}</p>
+                    </div>
+                    <div className="bg-purple-900/20 border border-purple-700/50 rounded-lg p-4 text-center">
+                      <p className="text-xs text-purple-400 mb-2">API Pods</p>
+                      <p className="text-3xl font-bold text-purple-400">{systemStatus.cluster.api_pods}</p>
+                    </div>
+                    <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-4 text-center">
+                      <p className="text-xs text-green-400 mb-2">Worker Pods</p>
+                      <p className="text-3xl font-bold text-green-400">{systemStatus.cluster.worker_pods}</p>
+                    </div>
+                    <div className="bg-gray-700/50 rounded-lg p-4 text-center">
+                      <p className="text-xs text-gray-400 mb-2">Redis</p>
+                      <p className="text-lg font-bold text-green-400">{systemStatus.cluster.redis_status}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance Metrics */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold mb-4">📊 Performance Metrics (Last 7 Days)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-700/50 rounded-lg p-4">
+                      <p className="text-xs text-gray-400 mb-2">Avg Processing Time</p>
+                      <p className="text-2xl font-bold">{systemStatus.performance.avg_processing_time_minutes.toFixed(1)}<span className="text-sm text-gray-400 ml-1">min</span></p>
+                    </div>
+                    <div className="bg-gray-700/50 rounded-lg p-4">
+                      <p className="text-xs text-gray-400 mb-2">Avg Video Duration</p>
+                      <p className="text-2xl font-bold">{systemStatus.performance.avg_video_duration_seconds}<span className="text-sm text-gray-400 ml-1">sec</span></p>
+                    </div>
+                    <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-4">
+                      <p className="text-xs text-green-400 mb-2">Success Rate</p>
+                      <p className="text-2xl font-bold text-green-400">{systemStatus.performance.success_rate_percentage}%</p>
+                    </div>
+                    <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+                      <p className="text-xs text-blue-400 mb-2">Tasks (24h)</p>
+                      <p className="text-2xl font-bold text-blue-400">{systemStatus.performance.last_24h_tasks}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 text-right">
+                  Last updated: {new Date(systemStatus.last_updated).toLocaleTimeString()}
+                </p>
               </div>
             )}
           </div>
