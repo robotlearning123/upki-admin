@@ -3,7 +3,6 @@ import { fetchAdminData, fetchAnalytics, fetchRealtimeData } from './services/ap
 import type { AdminData, VideoJob, AnalyticsData, RealtimeData } from './services/api';
 
 const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
-const REALTIME_REFRESH_INTERVAL = 5000; // 5 seconds for realtime tab
 const ADMIN_PASSWORD = 'upki2024admin';
 const AUTH_KEY = 'upki_admin_auth';
 
