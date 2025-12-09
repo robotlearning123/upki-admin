@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchAdminData, fetchAnalytics, fetchRealtimeData, fetchSystemStatus } from './services/api';
 import type { AdminData, VideoJob, AnalyticsData, RealtimeData, SystemStatus } from './services/api';
 
-const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
+const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates (auto-refresh enabled)
 const ADMIN_PASSWORD = 'upki2024admin';
 const AUTH_KEY = 'upki_admin_auth';
 
