@@ -393,11 +393,16 @@ function App() {
                         <th className="text-left py-3 px-4 text-gray-400">Provider</th>
                         <th className="text-left py-3 px-4 text-gray-400">Registered</th>
                         <th className="text-left py-3 px-4 text-gray-400">Last Sign In</th>
+                        <th className="text-left py-3 px-4 text-gray-400">Videos</th>
                         <th className="text-left py-3 px-4 text-gray-400">Status</th>
+                        <th className="text-left py-3 px-4 text-gray-400">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.authUsers.map((user, i) => (
+                      {data.authUsers.map((user, i) => {
+                        const userVideos = getUserVideos(user.email);
+                        const completedCount = userVideos.filter(v => v.status === 'completed').length;
+                        return (
                         <tr key={user.id} className={`border-b border-gray-700/50 hover:bg-gray-700/30 ${isNewUser(user.created_at) ? 'bg-green-900/10' : ''}`}>
                           <td className="py-3 px-4 text-gray-500">{i + 1}</td>
                           <td className="py-3 px-4">
@@ -423,14 +428,30 @@ function App() {
                           </td>
                           <td className="py-3 px-4 text-gray-400">{user.last_sign_in_at ? formatRelativeTime(user.last_sign_in_at) : '-'}</td>
                           <td className="py-3 px-4">
+                            {userVideos.length > 0 ? (
+                              <span className="text-blue-400">{completedCount}/{userVideos.length}</span>
+                            ) : (
+                              <span className="text-gray-600">0</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
                             {user.email_confirmed_at ? (
                               <span className="text-green-400">✓ Confirmed</span>
                             ) : (
                               <span className="text-yellow-400">⏳ Pending</span>
                             )}
                           </td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={() => setSelectedUser(user.email)}
+                              className="px-3 py-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded"
+                            >
+                              View Details
+                            </button>
+                          </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
