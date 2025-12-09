@@ -113,8 +113,28 @@ function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Get all videos for a specific user
+  // Get all videos for a specific user - prefer Redis realtime data over Supabase
   const getUserVideos = (userEmail: string) => {
+    // First try to get from realtime Redis data (more accurate)
+    if (realtime?.data?.recent_submissions) {
+      const realtimeVideos = realtime.data.recent_submissions
+        .filter(task => task.user_id === userEmail)
+        .map(task => ({
+          id: task.task_id || '',
+          user_id: task.user_id,
+          status: task.status,
+          created_at: task.created_at,
+          completed_at: task.completed_at,
+          topic: task.topic,
+          video_url: undefined, // Redis doesn't return video_url in recent_submissions
+          duration: undefined,
+          error_message: task.error,
+        }));
+      if (realtimeVideos.length > 0) {
+        return realtimeVideos;
+      }
+    }
+    // Fallback to Supabase data
     if (!data) return [];
     return data.videoJobs.filter(job => job.user_id === userEmail);
   };
@@ -252,25 +272,26 @@ function App() {
           <StatCard
             icon="🎬"
             label="Total Videos"
-            value={data?.videoStats.total || 0}
+            value={realtime?.data?.system_stats?.total_tasks_in_redis || data?.videoStats.total || 0}
+            sublabel={realtime ? '(Redis)' : '(Supabase)'}
             color="purple"
           />
           <StatCard
             icon="✅"
             label="Completed"
-            value={data?.videoStats.completed || 0}
+            value={realtime?.data?.system_stats?.completed || data?.videoStats.completed || 0}
             color="green"
           />
           <StatCard
             icon="❌"
             label="Failed"
-            value={data?.videoStats.failed || 0}
+            value={realtime?.data?.system_stats?.failed || data?.videoStats.failed || 0}
             color="red"
           />
           <StatCard
             icon="⏳"
-            label="Pending"
-            value={data?.videoStats.pending || 0}
+            label="Pending/Queued"
+            value={realtime?.data?.system_stats?.queued || data?.videoStats.pending || 0}
             color="yellow"
           />
           <StatCard
@@ -281,29 +302,26 @@ function App() {
           />
         </div>
 
-        {/* Success Rate */}
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-medium">Success Rate</h3>
-            <span className="text-2xl font-bold text-green-400">
-              {data?.videoStats.total
-                ? Math.round((data.videoStats.completed / data.videoStats.total) * 100)
-                : 0}%
-            </span>
-          </div>
-          <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
-            <div
-              className="bg-green-500 h-full transition-all duration-500"
-              style={{
-                width: `${
-                  data?.videoStats.total
-                    ? (data.videoStats.completed / data.videoStats.total) * 100
-                    : 0
-                }%`,
-              }}
-            ></div>
-          </div>
-        </div>
+        {/* Success Rate - use Redis data when available */}
+        {(() => {
+          const total = realtime?.data?.system_stats?.total_tasks_in_redis || data?.videoStats.total || 0;
+          const completed = realtime?.data?.system_stats?.completed || data?.videoStats.completed || 0;
+          const successRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+          return (
+            <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-8">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium">Success Rate {realtime ? '(Redis)' : '(Supabase)'}</h3>
+                <span className="text-2xl font-bold text-green-400">{successRate}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-green-500 h-full transition-all duration-500"
+                  style={{ width: `${successRate}%` }}
+                ></div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Tabs */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
@@ -320,7 +338,7 @@ function App() {
               >
                 {tab === 'overview' && '📈 Overview'}
                 {tab === 'users' && `👥 Users (${data?.authUserStats.total || 0})`}
-                {tab === 'videos' && `🎬 Videos (${data?.videoStats.total || 0})`}
+                {tab === 'videos' && `🎬 Videos (${realtime?.data?.system_stats?.total_tasks_in_redis || data?.videoStats.total || 0})`}
                 {tab === 'analytics' && `📊 Analytics${analytics?.realtime ? ` (${analytics.realtime.activeUsers} live)` : ''}`}
                 {tab === 'realtime' && `⚡ Realtime${realtime?.data?.system_stats ? ` (${realtime.data.system_stats.processing} active)` : ''}`}
               </button>
@@ -496,65 +514,89 @@ function App() {
               </div>
             )}
 
-            {activeTab === 'videos' && data && (
+            {activeTab === 'videos' && (data || realtime) && (
               <div>
-                <h3 className="text-lg font-semibold mb-4">Recent Videos ({data.videoJobs.length})</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="text-left py-3 px-3 text-gray-400">Status</th>
-                        <th className="text-left py-3 px-3 text-gray-400">User</th>
-                        <th className="text-left py-3 px-3 text-gray-400">Created</th>
-                        <th className="text-left py-3 px-3 text-gray-400">Duration</th>
-                        <th className="text-left py-3 px-3 text-gray-400">Topic</th>
-                        <th className="text-left py-3 px-3 text-gray-400">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.videoJobs.slice(0, 50).map((job) => (
-                        <tr key={job.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                          <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded text-xs ${
-                              job.status === 'completed' ? 'bg-green-600/20 text-green-400' :
-                              job.status === 'failed' ? 'bg-red-600/20 text-red-400' :
-                              job.status === 'processing' ? 'bg-yellow-600/20 text-yellow-400' :
-                              'bg-gray-600/20 text-gray-400'
-                            }`}>
-                              {job.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-gray-400 max-w-[120px] truncate">
-                            {job.user_id || <span className="italic text-gray-600">anonymous</span>}
-                          </td>
-                          <td className="py-3 px-3 text-gray-400">{formatDate(job.created_at)}</td>
-                          <td className="py-3 px-3 text-gray-400">{formatDuration(job.duration)}</td>
-                          <td className="py-3 px-3 text-gray-300 max-w-[200px] truncate">{job.topic || '-'}</td>
-                          <td className="py-3 px-3">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => setSelectedVideo(job)}
-                                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
-                              >
-                                Details
-                              </button>
-                              {job.video_url && (
-                                <a
-                                  href={job.video_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded"
-                                >
-                                  ▶️
-                                </a>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Use Redis data when available, fallback to Supabase */}
+                {(() => {
+                  const realtimeJobs = realtime?.data?.recent_submissions?.map(task => ({
+                    id: task.task_id || task.topic || '',
+                    user_id: task.user_id,
+                    status: task.status,
+                    created_at: task.created_at,
+                    completed_at: task.completed_at,
+                    topic: task.topic,
+                    video_url: undefined,
+                    duration: undefined,
+                    error_message: task.error,
+                  })) || [];
+                  const videoList = realtimeJobs.length > 0 ? realtimeJobs : (data?.videoJobs || []);
+                  const dataSource = realtimeJobs.length > 0 ? 'Redis (accurate)' : 'Supabase (may be stale)';
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Recent Videos ({videoList.length})</h3>
+                        <span className="text-xs text-gray-500">Data source: {dataSource}</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-700">
+                              <th className="text-left py-3 px-3 text-gray-400">Status</th>
+                              <th className="text-left py-3 px-3 text-gray-400">User</th>
+                              <th className="text-left py-3 px-3 text-gray-400">Created</th>
+                              <th className="text-left py-3 px-3 text-gray-400">Duration</th>
+                              <th className="text-left py-3 px-3 text-gray-400">Topic</th>
+                              <th className="text-left py-3 px-3 text-gray-400">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {videoList.slice(0, 50).map((job, idx) => (
+                              <tr key={job.id || idx} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                                <td className="py-3 px-3">
+                                  <span className={`px-2 py-0.5 rounded text-xs ${
+                                    job.status === 'completed' ? 'bg-green-600/20 text-green-400' :
+                                    job.status === 'failed' ? 'bg-red-600/20 text-red-400' :
+                                    job.status === 'processing' ? 'bg-yellow-600/20 text-yellow-400' :
+                                    'bg-gray-600/20 text-gray-400'
+                                  }`}>
+                                    {job.status}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-gray-400 max-w-[120px] truncate">
+                                  {job.user_id || <span className="italic text-gray-600">anonymous</span>}
+                                </td>
+                                <td className="py-3 px-3 text-gray-400">{formatDate(job.created_at)}</td>
+                                <td className="py-3 px-3 text-gray-400">{formatDuration(job.duration)}</td>
+                                <td className="py-3 px-3 text-gray-300 max-w-[200px] truncate">{job.topic || '-'}</td>
+                                <td className="py-3 px-3">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => setSelectedVideo(job)}
+                                      className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+                                    >
+                                      Details
+                                    </button>
+                                    {job.video_url && (
+                                      <a
+                                        href={job.video_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2 py-1 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded"
+                                      >
+                                        ▶️
+                                      </a>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
 
