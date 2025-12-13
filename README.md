@@ -57,3 +57,7 @@ The dashboard fetches data from two sources:
 - **System Status**: `https://api.upki.ai/api/v1/admin/system-status` (with static fallback)
 
 All admin endpoints require `X-Admin-API-Key` header authentication.
+
+## Documentation
+
+- **[Troubleshooting Guide](./docs/troubleshooting/README.md)** - Issue diagnosis and resolution documentation
