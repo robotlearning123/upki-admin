@@ -110,34 +110,17 @@ function App() {
   };
 
   const formatDuration = (seconds?: number) => {
-    if (!seconds) return '-';
+    if (seconds === undefined || seconds === null) return '-';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Get all videos for a specific user - prefer Redis realtime data over Supabase
+  // Get all videos for a specific user - use Supabase for complete data (video_url, duration)
   const getUserVideos = (userEmail: string) => {
-    // First try to get from realtime Redis data (more accurate)
-    if (realtime?.data?.recent_submissions) {
-      const realtimeVideos = realtime.data.recent_submissions
-        .filter(task => task.user_id === userEmail)
-        .map(task => ({
-          id: task.task_id || '',
-          user_id: task.user_id,
-          status: task.status,
-          created_at: task.created_at,
-          completed_at: task.completed_at,
-          topic: task.topic,
-          video_url: undefined, // Redis doesn't return video_url in recent_submissions
-          duration: undefined,
-          error_message: task.error,
-        }));
-      if (realtimeVideos.length > 0) {
-        return realtimeVideos;
-      }
-    }
-    // Fallback to Supabase data
+    // Always use Supabase data for user details modal
+    // It contains complete video_url and duration fields
+    // Redis realtime data is used elsewhere for live monitoring
     if (!data) return [];
     return data.videoJobs.filter(job => job.user_id === userEmail);
   };
